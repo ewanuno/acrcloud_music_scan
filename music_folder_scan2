@@ -1,0 +1,81 @@
+#!/bin/bash
+
+#todo: handle commas within double quotes in csv files
+# e.g. "blah,blah"
+# possible oneliner:
+# awk -F'"' -v OFS='' '{ for (i=2; i<=NF; i+=2) gsub(",", "", $i) } 1' source_file.csv >processed_file.csv
+
+# this Script does the following:
+#1.iterate through the wav files in a directory
+#2.scan the files with acrcustom.py to get metadata from acrcloud
+#3.create one csv per directory containg data about the files.
+#4.remove the temporary files.
+dirname=${PWD##*/}
+id=mfs
+
+
+for f in *.wav
+do
+  echo "processing file $f with ACRCloud"
+  #music_scan "$f"
+  python /Users/ewancolsell/Documents/GitHub/acrcloud_scan_files_python/acrcustom.py  "$f"
+  #acr custom.py produces a .csv with the format:
+  # filename,timestamp,custom_files_title,custom_acrid,title,artists,album,acrid,played_duration,label,isrc,upc,dezzer,spotify,itunes,youtube
+
+  # for files with no match acrcloud produces a csv file with just an index and no records
+  # the following will add a record showing "unknown_title" etc for files with no records
+
+  if [[ $(wc -l <"$f.csv") -eq 1 ]]; then
+    #statements
+    echo "no acrcloud results for file $f adding a blank record..."
+    echo "$f,,,,unknown_title,unknown_artists,unknown_album,,,,,,,,," >> "$f".csv
+
+  fi
+
+  # acrcustom generates a csv file with a load of fields we don't care about
+  # here we remove the extra feilds.
+  echo "remove extra fields from $f.csv"
+
+  cut -d, -f1,5,6,7,9,10 "$f.csv" > "$f.$id.tmp0"
+
+  # echo "remove duplicate records and sort"
+  # sort -s -u "$0.tmp" > "$f"_processed.csv.tmp0
+  echo "$f.$id.tmp0"
+  cat "$f.$id.tmp0"
+done
+echo "finished scanning with acrcloud"
+
+# get the index for the csv files
+# do this just for the first .csv file
+for f in *.$id.tmp0
+do
+  echo "getting index from $f"
+head -n 1 "$f" > $id.index.tmp
+cat $id.index.tmp
+break
+done
+
+for f in *.$id.tmp0
+do
+  # echo "remove index and sort $f"
+  # sed 1d $f | sort -s -u > "$f".$id.tmp1
+  echo "remove index from $f"
+  sed 1d "$f" > "$f.$id.tmp1"
+
+  echo "remove duplicate records and sort in $f.$id.tmp1"
+  sort -s -u "$f.$id.tmp1" > "$f.$id".tmp2
+done
+
+
+echo "merging csv files...."
+cat *.$id.tmp2 > "all.$id.tmp"
+
+
+echo "restore index line at begining of file."
+cat "$id.index.tmp" "all.$id.tmp" > "$dirname.csv"
+
+echo "removing temporary files..."
+rm *.tmp *.tmp1 *.tmp0 *.tmp2 *.wav.csv  > /dev/null
+
+cat "$dirname.csv"
+echo "wrote file $dirname.csv"
